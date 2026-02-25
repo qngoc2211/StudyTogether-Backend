@@ -7,11 +7,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin("*")
+@CrossOrigin(origins = "https://qngoc2211.github.io")
 public class AuthController {
 
     private final UsersRepository usersRepository;
@@ -26,20 +27,32 @@ public class AuthController {
         this.passwordEncoder = passwordEncoder;
     }
 
+    // ================= REGISTER =================
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Users user) {
+    public ResponseEntity<?> register(@RequestBody Users request) {
 
-        if (usersRepository.existsByUsername(user.getUsername())) {
+        if (usersRepository.existsByUsername(request.getUsername())) {
             return ResponseEntity.badRequest()
-                    .body("Username already exists!");
+                    .body(Map.of("message", "Username already exists!"));
         }
 
-        user.setPassword(passwordEncoder.encode(user.getPassword()));
-        usersRepository.save(user);
+        if (usersRepository.existsByEmail(request.getEmail())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Email already exists!"));
+        }
 
-        return ResponseEntity.ok("Register success!");
+        request.setPassword(passwordEncoder.encode(request.getPassword()));
+        request.setRole("ROLE_USER");
+        request.setPoints(0);
+
+        usersRepository.save(request);
+
+        return ResponseEntity.ok(
+                Map.of("message", "Register success!")
+        );
     }
 
+    // ================= LOGIN =================
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Users request) {
 
@@ -47,7 +60,8 @@ public class AuthController {
                 usersRepository.findByUsername(request.getUsername());
 
         if (userOptional.isEmpty()) {
-            return ResponseEntity.status(401).body("User not found!");
+            return ResponseEntity.status(401)
+                    .body(Map.of("message", "User not found!"));
         }
 
         Users user = userOptional.get();
@@ -56,11 +70,18 @@ public class AuthController {
                 request.getPassword(),
                 user.getPassword())) {
 
-            return ResponseEntity.status(401).body("Wrong password!");
+            return ResponseEntity.status(401)
+                    .body(Map.of("message", "Wrong password!"));
         }
 
         String token = jwtUtil.generateToken(user.getUsername());
 
-        return ResponseEntity.ok(token);
+        return ResponseEntity.ok(
+                Map.of(
+                        "token", token,
+                        "username", user.getUsername(),
+                        "role", user.getRole()
+                )
+        );
     }
 }
