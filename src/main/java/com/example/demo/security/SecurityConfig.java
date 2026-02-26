@@ -7,7 +7,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.*;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
@@ -25,46 +27,76 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-            .csrf(csrf -> csrf.disable())
-            .cors(cors -> {}) // bật cors
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
-                .anyRequest().authenticated()
-            )
-            .addFilterBefore(jwtAuthenticationFilter,
-                    UsernamePasswordAuthenticationFilter.class);
+                // ❌ Tắt CSRF vì dùng JWT
+                .csrf(csrf -> csrf.disable())
+
+                // ✅ BẬT CORS
+                .cors(cors -> {})
+
+                // ❌ Không dùng session (JWT stateless)
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                // ✅ PHÂN QUYỀN
+                .authorizeHttpRequests(auth -> auth
+
+                        // Cho phép login/register không cần token
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        // Admin API
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // User API
+                        .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
+
+                        // Các request khác cần login
+                        .anyRequest().authenticated()
+                )
+
+                // ✅ Thêm JWT filter
+                .addFilterBefore(jwtAuthenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
+
+    // ==============================
+    // CẤU HÌNH CORS CHUẨN
+    // ==============================
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration config = new CorsConfiguration();
+        CorsConfiguration configuration = new CorsConfiguration();
 
-        // ✅ CHỈ cho phép GitHub Pages của em
-        config.setAllowedOrigins(List.of(
+        // ⚠ Cho phép frontend GitHub Pages
+        configuration.setAllowedOrigins(List.of(
                 "https://qngoc2211.github.io"
         ));
 
-        config.setAllowedMethods(List.of(
-                "GET", "POST", "PUT", "DELETE", "OPTIONS"
+        // Cho phép tất cả method cần thiết
+        configuration.setAllowedMethods(List.of(
+                "GET",
+                "POST",
+                "PUT",
+                "DELETE",
+                "OPTIONS"
         ));
 
-        config.setAllowedHeaders(List.of("*"));
+        // Cho phép tất cả header
+        configuration.setAllowedHeaders(List.of("*"));
 
-        // Không dùng cookie → có thể để false
-        config.setAllowCredentials(false);
+        // JWT không dùng cookie → để false
+        configuration.setAllowCredentials(false);
+
+        // Cache preflight 1 giờ
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();
 
-        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration("/**", configuration);
 
         return source;
     }
