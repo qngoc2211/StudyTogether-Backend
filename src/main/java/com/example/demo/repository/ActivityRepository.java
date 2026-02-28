@@ -12,6 +12,8 @@ public interface ActivityRepository extends JpaRepository<Activity, Long> {
     List<Activity> findByStartDateAfter(LocalDateTime date);
     List<Activity> findByStartDateBetween(LocalDateTime start, LocalDateTime end);
     
-    // Sửa method này
+    // THÊM DÒNG NÀY - Fix lỗi compilation
+    List<Activity> findByStartDateBeforeAndEndDateAfter(LocalDateTime startDate, LocalDateTime endDate);
+    
     List<Activity> findByTitleContainingOrDescriptionContaining(String title, String description);
 }
