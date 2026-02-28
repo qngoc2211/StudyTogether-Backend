@@ -1,5 +1,6 @@
 package com.example.demo.security;
 
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -8,6 +9,8 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -29,78 +32,94 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                // Tắt CSRF vì dùng JWT
+                // Disable CSRF vì dùng JWT
                 .csrf(csrf -> csrf.disable())
-                
-                // Cấu hình CORS
+
+                // CORS config
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                
+
                 // Không dùng session
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-                
+
+                // Xử lý lỗi auth rõ ràng (FIX 403 sai)
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(authenticationEntryPoint())
+                        .accessDeniedHandler(accessDeniedHandler())
+                )
+
                 // Phân quyền
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints - KHÔNG cần token
+
+                        // Public - KHÔNG cần token
+                        .requestMatchers("/api/auth/**").permitAll()
+
+                        // Public GET data
                         .requestMatchers(
-                            "/api/auth/**"     // login, register, verify
+                                "/api/posts",
+                                "/api/posts/**",
+                                "/api/activities",
+                                "/api/activities/**",
+                                "/api/quizzes/daily",
+                                "/api/quizzes/leaderboard"
                         ).permitAll()
-                        
-                        // Public endpoints - có thể xem không cần đăng nhập
+
+                        // Cần đăng nhập
                         .requestMatchers(
-                            "/api/posts",
-                            "/api/posts/**",
-                            "/api/activities",
-                            "/api/activities/**",
-                            "/api/quizzes/daily",
-                            "/api/quizzes/leaderboard"
-                        ).permitAll()
-                        
-                        // User endpoints - cần đăng nhập (có token)
-                        .requestMatchers(
-                            "/api/posts/create",
-                            "/api/posts/*/comments",
-                            "/api/quizzes/submit",
-                            "/api/quizzes/history",
-                            "/api/activities/*/register",
-                            "/api/user/**"
+                                "/api/posts/create",
+                                "/api/posts/*/comments",
+                                "/api/quizzes/submit",
+                                "/api/quizzes/history",
+                                "/api/activities/*/register",
+                                "/api/user/**"
                         ).authenticated()
-                        
-                        // Admin endpoints - chỉ ADMIN mới được
-                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
-                        
-                        // Các request khác cũng cần đăng nhập
+
+                        // Admin only
+                        .requestMatchers("/api/admin/**")
+                        .hasAuthority("ROLE_ADMIN")
+
+                        // Mặc định yêu cầu login
                         .anyRequest().authenticated()
                 )
-                
+
                 // Thêm JWT filter trước UsernamePasswordAuthenticationFilter
-                .addFilterBefore(jwtAuthenticationFilter, 
+                .addFilterBefore(jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
+    // ===== Xử lý khi CHƯA đăng nhập =====
     @Bean
-public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration configuration = new CorsConfiguration();
+    public AuthenticationEntryPoint authenticationEntryPoint() {
+        return (request, response, authException) ->
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+    }
 
-    // Cho phép tất cả origin (để test)
-    configuration.setAllowedOriginPatterns(List.of("*"));
+    // ===== Xử lý khi KHÔNG đủ quyền =====
+    @Bean
+    public AccessDeniedHandler accessDeniedHandler() {
+        return (request, response, accessDeniedException) ->
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden");
+    }
 
-    // Cho phép tất cả method
-    configuration.setAllowedMethods(List.of("*"));
+    // ===== CORS =====
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
 
-    // Cho phép tất cả header
-    configuration.setAllowedHeaders(List.of("*"));
+        CorsConfiguration configuration = new CorsConfiguration();
 
-    // Không bật credentials để tránh conflict
-    configuration.setAllowCredentials(false);
+        configuration.setAllowedOriginPatterns(List.of("*"));
+        configuration.setAllowedMethods(List.of("*"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(false);
 
-    UrlBasedCorsConfigurationSource source =
-            new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", configuration);
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
 
-    return source;
-}
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
+    }
 }
