@@ -82,41 +82,25 @@ public class SecurityConfig {
     }
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Cho phép các origin
-        configuration.setAllowedOrigins(List.of(
-                "https://qngoc2211.github.io",
-                "http://localhost:5500",
-                "http://127.0.0.1:5500",
-                "http://localhost:3000",
-                "http://localhost:8080"
-        ));
-        
-        // Cho phép các method
-        configuration.setAllowedMethods(List.of(
-                "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
-        ));
-        
-        // Cho phép các header
-        configuration.setAllowedHeaders(List.of(
-                "Authorization",
-                "Content-Type", 
-                "Accept", 
-                "Origin", 
-                "X-Requested-With"
-        ));
-        
-        // Cho phép gửi credentials
-        configuration.setAllowCredentials(true);
-        
-        // Cache preflight 1 giờ
-        configuration.setMaxAge(3600L);
+public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        
-        return source;
-    }
+    // Cho phép tất cả origin (để test)
+    configuration.setAllowedOriginPatterns(List.of("*"));
+
+    // Cho phép tất cả method
+    configuration.setAllowedMethods(List.of("*"));
+
+    // Cho phép tất cả header
+    configuration.setAllowedHeaders(List.of("*"));
+
+    // Không bật credentials để tránh conflict
+    configuration.setAllowCredentials(false);
+
+    UrlBasedCorsConfigurationSource source =
+            new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", configuration);
+
+    return source;
+}
 }
