@@ -19,13 +19,20 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private JwtUtil jwtUtil;
-    private UsersRepository usersRepository;
+    private final JwtUtil jwtUtil;
+    private final UsersRepository usersRepository;
 
     public JwtAuthenticationFilter(JwtUtil jwtUtil,
                                    UsersRepository usersRepository) {
         this.jwtUtil = jwtUtil;
         this.usersRepository = usersRepository;
+    }
+
+    // 🔥 Quan trọng: Bỏ qua hoàn toàn filter cho /api/auth/**
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.startsWith("/api/auth");
     }
 
     @Override
@@ -34,16 +41,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String requestURI = request.getRequestURI();
-
-        // 🔥 Bỏ qua login/register
-        if (request.getServletPath().startsWith("/api/auth")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
         String authHeader = request.getHeader("Authorization");
 
+        // Nếu không có token → tiếp tục chain
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -84,7 +84,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
         } catch (Exception e) {
-            // Token lỗi → bỏ qua
+            // Nếu token lỗi → không set authentication
+            // Không trả 403 ở đây, để Spring xử lý phía sau
         }
 
         filterChain.doFilter(request, response);
