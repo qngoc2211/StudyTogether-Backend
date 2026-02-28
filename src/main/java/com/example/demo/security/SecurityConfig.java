@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -14,6 +15,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 @Configuration
+@EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
 
@@ -27,77 +29,94 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                // ❌ Tắt CSRF vì dùng JWT
+                // Tắt CSRF vì dùng JWT
                 .csrf(csrf -> csrf.disable())
-
-                // ✅ BẬT CORS
-                .cors(cors -> {})
-
-                // ❌ Không dùng session (JWT stateless)
+                
+                // Cấu hình CORS
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                
+                // Không dùng session
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-
-                // ✅ PHÂN QUYỀN
+                
+                // Phân quyền
                 .authorizeHttpRequests(auth -> auth
-
-                        // Cho phép login/register không cần token
-                        .requestMatchers("/api/auth/**").permitAll()
-
-                        // Admin API
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-
-                        // User API
-                        .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
-
-                        // Các request khác cần login
+                        // Public endpoints - KHÔNG cần token
+                        .requestMatchers(
+                            "/api/auth/**"     // login, register, verify
+                        ).permitAll()
+                        
+                        // Public endpoints - có thể xem không cần đăng nhập
+                        .requestMatchers(
+                            "/api/posts",
+                            "/api/posts/**",
+                            "/api/activities",
+                            "/api/activities/**",
+                            "/api/quizzes/daily",
+                            "/api/quizzes/leaderboard"
+                        ).permitAll()
+                        
+                        // User endpoints - cần đăng nhập (có token)
+                        .requestMatchers(
+                            "/api/posts/create",
+                            "/api/posts/*/comments",
+                            "/api/quizzes/submit",
+                            "/api/quizzes/history",
+                            "/api/activities/*/register",
+                            "/api/user/**"
+                        ).authenticated()
+                        
+                        // Admin endpoints - chỉ ADMIN mới được
+                        .requestMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
+                        
+                        // Các request khác cũng cần đăng nhập
                         .anyRequest().authenticated()
                 )
-
-                // ✅ Thêm JWT filter
-                .addFilterBefore(jwtAuthenticationFilter,
+                
+                // Thêm JWT filter trước UsernamePasswordAuthenticationFilter
+                .addFilterBefore(jwtAuthenticationFilter, 
                         UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-
-    // ==============================
-    // CẤU HÌNH CORS CHUẨN
-    // ==============================
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-
         CorsConfiguration configuration = new CorsConfiguration();
-
-        // ⚠ Cho phép frontend GitHub Pages
+        
+        // Cho phép các origin
         configuration.setAllowedOrigins(List.of(
-                "https://qngoc2211.github.io"
+                "https://qngoc2211.github.io",
+                "http://localhost:5500",
+                "http://127.0.0.1:5500",
+                "http://localhost:3000",
+                "http://localhost:8080"
         ));
-
-        // Cho phép tất cả method cần thiết
+        
+        // Cho phép các method
         configuration.setAllowedMethods(List.of(
-                "GET",
-                "POST",
-                "PUT",
-                "DELETE",
-                "OPTIONS"
+                "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"
         ));
-
-        // Cho phép tất cả header
-        configuration.setAllowedHeaders(List.of("*"));
-
-        // JWT không dùng cookie → để false
-        configuration.setAllowCredentials(false);
-
+        
+        // Cho phép các header
+        configuration.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type", 
+                "Accept", 
+                "Origin", 
+                "X-Requested-With"
+        ));
+        
+        // Cho phép gửi credentials
+        configuration.setAllowCredentials(true);
+        
         // Cache preflight 1 giờ
         configuration.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source =
-                new UrlBasedCorsConfigurationSource();
-
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-
+        
         return source;
     }
 }

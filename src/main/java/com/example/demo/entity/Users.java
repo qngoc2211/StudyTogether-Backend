@@ -9,7 +9,7 @@ public class Users {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;  // Đổi từ Integer sang Long
 
     @Column(nullable = false, unique = true)
     private String username;
@@ -25,7 +25,17 @@ public class Users {
 
     private Integer points = 0;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "full_name")
+    private String fullName;
+
+    @Column(name = "is_active")
+    private Boolean active = true;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
+    @Column(name = "last_login")
+    private LocalDateTime lastLogin;
 
     public Users() {}
 
@@ -33,12 +43,13 @@ public class Users {
         this.username = username;
         this.email = email;
         this.password = password;
+        this.createdAt = LocalDateTime.now();
+        this.active = true;
     }
 
     // Getter & Setter
-
-    public Integer getId() { return id; }
-    public void setId(Integer id) { this.id = id; }
+    public Long getId() { return id; }  // Đổi Integer → Long
+    public void setId(Long id) { this.id = id; }  // Đổi Integer → Long
 
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
@@ -54,7 +65,17 @@ public class Users {
 
     public Integer getPoints() { return points; }
     public void setPoints(Integer points) { this.points = points; }
-
+    
+    public String getFullName() { return fullName; }
+    public void setFullName(String fullName) { this.fullName = fullName; }
+    
+    public Boolean isActive() { return active; }
+    public Boolean getActive() { return active; }
+    public void setActive(Boolean active) { this.active = active; }
+    
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    
+    public LocalDateTime getLastLogin() { return lastLogin; }
+    public void setLastLogin(LocalDateTime lastLogin) { this.lastLogin = lastLogin; }
 }

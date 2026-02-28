@@ -3,85 +3,128 @@ package com.example.demo.controller;
 import com.example.demo.entity.Users;
 import com.example.demo.repository.UsersRepository;
 import com.example.demo.security.JwtUtil;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "https://qngoc2211.github.io")
+@CrossOrigin(origins = "*")
 public class AuthController {
 
-    private final UsersRepository usersRepository;
-    private final JwtUtil jwtUtil;
-    private final PasswordEncoder passwordEncoder;
+    @Autowired
+    private UsersRepository usersRepository;
+    
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
 
-    public AuthController(UsersRepository usersRepository,
-                          JwtUtil jwtUtil,
-                          PasswordEncoder passwordEncoder) {
-        this.usersRepository = usersRepository;
-        this.jwtUtil = jwtUtil;
-        this.passwordEncoder = passwordEncoder;
-    }
-
-    // ================= REGISTER =================
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Users request) {
-
-        if (usersRepository.existsByUsername(request.getUsername())) {
+    public ResponseEntity<?> register(@RequestBody Users user) {
+        try {
+            if (usersRepository.existsByUsername(user.getUsername())) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "message", "Username đã tồn tại"));
+            }
+            
+            if (usersRepository.existsByEmail(user.getEmail())) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "message", "Email đã tồn tại"));
+            }
+            
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+            user.setCreatedAt(LocalDateTime.now());
+            user.setRole("ROLE_USER");  // Format đúng cho Spring Security
+            user.setPoints(0);
+            
+            Users savedUser = usersRepository.save(user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Đăng ký thành công");
+            response.put("userId", savedUser.getId());
+            response.put("username", savedUser.getUsername());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Username already exists!"));
+                .body(Map.of("success", false, "message", "Đăng ký thất bại: " + e.getMessage()));
         }
-
-        if (usersRepository.existsByEmail(request.getEmail())) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Email already exists!"));
-        }
-
-        request.setPassword(passwordEncoder.encode(request.getPassword()));
-        request.setRole("ROLE_USER");
-        request.setPoints(0);
-
-        usersRepository.save(request);
-
-        return ResponseEntity.ok(
-                Map.of("message", "Register success!")
-        );
     }
 
-    // ================= LOGIN =================
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Users request) {
-
-        Optional<Users> userOptional =
-                usersRepository.findByUsername(request.getUsername());
-
-        if (userOptional.isEmpty()) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("message", "User not found!"));
+    public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
+        try {
+            String username = credentials.get("username");
+            String password = credentials.get("password");
+            
+            Users user = usersRepository.findByUsername(username)
+                .orElse(null);
+                
+            if (user == null) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "message", "Sai tên đăng nhập hoặc mật khẩu"));
+            }
+            
+            if (!passwordEncoder.matches(password, user.getPassword())) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("success", false, "message", "Sai tên đăng nhập hoặc mật khẩu"));
+            }
+            
+            String token = jwtUtil.generateToken(user.getUsername());
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Đăng nhập thành công");
+            response.put("token", token);
+            response.put("username", user.getUsername());
+            response.put("role", user.getRole());
+            response.put("userId", user.getId());
+            response.put("points", user.getPoints());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("success", false, "message", "Đăng nhập thất bại: " + e.getMessage()));
         }
+    }
 
-        Users user = userOptional.get();
-
-        if (!passwordEncoder.matches(
-                request.getPassword(),
-                user.getPassword())) {
-
+    @PostMapping("/verify")
+    public ResponseEntity<?> verifyToken(@RequestHeader("Authorization") String token) {
+        try {
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.substring(7);
+                String username = jwtUtil.extractUsername(token);
+                
+                if (username != null && jwtUtil.validateToken(token)) {
+                    Users user = usersRepository.findByUsername(username).orElse(null);
+                    
+                    if (user != null) {
+                        Map<String, Object> response = new HashMap<>();
+                        response.put("success", true);
+                        response.put("username", user.getUsername());
+                        response.put("role", user.getRole());
+                        response.put("userId", user.getId());
+                        return ResponseEntity.ok(response);
+                    }
+                }
+            }
+            
             return ResponseEntity.status(401)
-                    .body(Map.of("message", "Wrong password!"));
+                .body(Map.of("success", false, "message", "Token không hợp lệ"));
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(401)
+                .body(Map.of("success", false, "message", "Xác thực thất bại"));
         }
-
-        String token = jwtUtil.generateToken(user.getUsername());
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "token", token,
-                        "username", user.getUsername(),
-                        "role", user.getRole()
-                )
-        );
     }
 }
