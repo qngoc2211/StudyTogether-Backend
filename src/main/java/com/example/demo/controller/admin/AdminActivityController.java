@@ -2,65 +2,83 @@ package com.example.demo.controller.admin;
 
 import com.example.demo.entity.Activity;
 import com.example.demo.repository.ActivityRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin/activities")
-@CrossOrigin(origins = "*")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminActivityController {
 
-    @Autowired
-    private ActivityRepository activityRepository;
+    private final ActivityRepository activityRepository;
 
-    @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public List<Activity> getAllActivities() {
-        return activityRepository.findAll();
+    public AdminActivityController(ActivityRepository activityRepository) {
+        this.activityRepository = activityRepository;
     }
 
+    // ===================== GET ALL =====================
+    @GetMapping
+    public ResponseEntity<List<Activity>> getAllActivities() {
+        List<Activity> activities = activityRepository.findAll();
+        return ResponseEntity.ok(activities);
+    }
+
+    // ===================== GET BY ID =====================
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Activity> getActivityById(@PathVariable Long id) {
         return activityRepository.findById(id)
                 .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // ===================== CREATE =====================
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public Activity createActivity(@RequestBody Activity activity) {
-        return activityRepository.save(activity);
+    public ResponseEntity<Activity> createActivity(@RequestBody Activity activity) {
+
+        activity.setId(null); // đảm bảo tạo mới
+
+        Activity savedActivity = activityRepository.save(activity);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(savedActivity);
     }
 
+    // ===================== UPDATE =====================
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Activity> updateActivity(@PathVariable Long id, @RequestBody Activity activityDetails) {
+    public ResponseEntity<Activity> updateActivity(
+            @PathVariable Long id,
+            @RequestBody Activity activityDetails) {
+
         return activityRepository.findById(id)
-                .map(activity -> {
-                    activity.setTitle(activityDetails.getTitle());
-                    activity.setDescription(activityDetails.getDescription());
-                    activity.setLocation(activityDetails.getLocation());
-                    activity.setStartDate(activityDetails.getStartDate());
-                    activity.setEndDate(activityDetails.getEndDate());
-                    activity.setImage(activityDetails.getImage());
-                    activity.setMaxParticipants(activityDetails.getMaxParticipants());
-                    return ResponseEntity.ok(activityRepository.save(activity));
+                .map(existingActivity -> {
+
+                    existingActivity.setTitle(activityDetails.getTitle());
+                    existingActivity.setDescription(activityDetails.getDescription());
+                    existingActivity.setLocation(activityDetails.getLocation());
+                    existingActivity.setStartDate(activityDetails.getStartDate());
+                    existingActivity.setEndDate(activityDetails.getEndDate());
+                    existingActivity.setImage(activityDetails.getImage());
+                    existingActivity.setMaxParticipants(activityDetails.getMaxParticipants());
+
+                    Activity updatedActivity = activityRepository.save(existingActivity);
+                    return ResponseEntity.ok(updatedActivity);
                 })
-                .orElse(ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    // ===================== DELETE =====================
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> deleteActivity(@PathVariable Long id) {
-        return activityRepository.findById(id)
-                .map(activity -> {
-                    activityRepository.delete(activity);
-                    return ResponseEntity.ok().build();
-                })
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<Void> deleteActivity(@PathVariable Long id) {
+
+        if (!activityRepository.existsById(id)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        activityRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
     }
 }

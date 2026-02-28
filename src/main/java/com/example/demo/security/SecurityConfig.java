@@ -32,10 +32,10 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                // Disable CSRF vì dùng JWT
+                // Disable CSRF (vì dùng JWT)
                 .csrf(csrf -> csrf.disable())
 
-                // CORS config
+                // Bật CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
                 // Không dùng session
@@ -43,7 +43,7 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
-                // Xử lý lỗi auth rõ ràng (FIX 403 sai)
+                // Xử lý lỗi rõ ràng
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint())
                         .accessDeniedHandler(accessDeniedHandler())
@@ -52,10 +52,9 @@ public class SecurityConfig {
                 // Phân quyền
                 .authorizeHttpRequests(auth -> auth
 
-                        // Public - KHÔNG cần token
+                        // ===== PUBLIC =====
                         .requestMatchers("/api/auth/**").permitAll()
 
-                        // Public GET data
                         .requestMatchers(
                                 "/api/posts",
                                 "/api/posts/**",
@@ -65,7 +64,7 @@ public class SecurityConfig {
                                 "/api/quizzes/leaderboard"
                         ).permitAll()
 
-                        // Cần đăng nhập
+                        // ===== AUTHENTICATED =====
                         .requestMatchers(
                                 "/api/posts/create",
                                 "/api/posts/*/comments",
@@ -75,44 +74,52 @@ public class SecurityConfig {
                                 "/api/user/**"
                         ).authenticated()
 
-                        // Admin only
+                        // ===== ADMIN =====
                         .requestMatchers("/api/admin/**")
                         .hasAuthority("ROLE_ADMIN")
 
-                        // Mặc định yêu cầu login
+                        // Các request khác yêu cầu login
                         .anyRequest().authenticated()
                 )
 
-                // Thêm JWT filter trước UsernamePasswordAuthenticationFilter
+                // Thêm JWT filter
                 .addFilterBefore(jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // ===== Xử lý khi CHƯA đăng nhập =====
+    // ===== 401 - CHƯA LOGIN =====
     @Bean
     public AuthenticationEntryPoint authenticationEntryPoint() {
         return (request, response, authException) ->
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
     }
 
-    // ===== Xử lý khi KHÔNG đủ quyền =====
+    // ===== 403 - KHÔNG ĐỦ QUYỀN =====
     @Bean
     public AccessDeniedHandler accessDeniedHandler() {
         return (request, response, accessDeniedException) ->
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden");
     }
 
-    // ===== CORS =====
+    // ===== CORS CONFIG =====
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
+        // Cho phép tất cả origin (an toàn vì không bật credentials)
         configuration.setAllowedOriginPatterns(List.of("*"));
-        configuration.setAllowedMethods(List.of("*"));
+
+        // Chỉ cho phép method phổ biến
+        configuration.setAllowedMethods(
+                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        );
+
         configuration.setAllowedHeaders(List.of("*"));
+
+        // QUAN TRỌNG: để false để tránh lỗi Render
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =

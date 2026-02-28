@@ -8,104 +8,152 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin/users")
-@CrossOrigin(origins = "*")
 public class AdminUserController {
 
     @Autowired
     private UsersRepository usersRepository;
-    
+
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    // ================= GET ALL USERS =================
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public List<UserDTO> getAllUsers() {
-        List<Users> users = usersRepository.findAll();
-        return users.stream().map(this::convertToDTO).collect(Collectors.toList());
+    public ResponseEntity<List<UserDTO>> getAllUsers() {
+        List<UserDTO> users = usersRepository.findAll()
+                .stream()
+                .map(this::convertToDTO)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(users);
     }
 
+    // ================= GET USER BY ID =================
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<UserDTO> getUserById(@PathVariable Long id) {  // Đổi Long → Long
+    public ResponseEntity<UserDTO> getUserById(@PathVariable Long id) {
+
         return usersRepository.findById(id)
                 .map(user -> ResponseEntity.ok(convertToDTO(user)))
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ================= CREATE USER =================
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public Users createUser(@RequestBody Users user) {
+    public ResponseEntity<UserDTO> createUser(@RequestBody Users user) {
+
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        return usersRepository.save(user);
+
+        if (user.getRole() == null || user.getRole().isBlank()) {
+            user.setRole("ROLE_USER");
+        }
+
+        Users savedUser = usersRepository.save(user);
+
+        return ResponseEntity.ok(convertToDTO(savedUser));
     }
 
+    // ================= UPDATE USER =================
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Users> updateUser(@PathVariable Long id, @RequestBody Users userDetails) {  // Đổi Long → Long
+    public ResponseEntity<UserDTO> updateUser(
+            @PathVariable Long id,
+            @RequestBody Users userDetails) {
+
         return usersRepository.findById(id)
                 .map(user -> {
+
                     user.setUsername(userDetails.getUsername());
                     user.setEmail(userDetails.getEmail());
-                    user.setFullName(userDetails.getFullName());  // Sửa getFullName()
+                    user.setFullName(userDetails.getFullName());
                     user.setRole(userDetails.getRole());
-                    user.setActive(userDetails.getActive());  // Sửa isActive() → getActive()
-                    if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
-                        user.setPassword(passwordEncoder.encode(userDetails.getPassword()));
+                    user.setActive(userDetails.getActive());
+
+                    if (userDetails.getPassword() != null &&
+                            !userDetails.getPassword().isBlank()) {
+                        user.setPassword(
+                                passwordEncoder.encode(userDetails.getPassword())
+                        );
                     }
-                    return ResponseEntity.ok(usersRepository.save(user));
+
+                    Users updatedUser = usersRepository.save(user);
+
+                    return ResponseEntity.ok(convertToDTO(updatedUser));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ================= DELETE USER =================
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> deleteUser(@PathVariable Long id) {  // Đổi Long → Long
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+
         return usersRepository.findById(id)
                 .map(user -> {
                     usersRepository.delete(user);
-                    return ResponseEntity.ok().build();
+                    return ResponseEntity.ok().<Void>build();
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ================= TOGGLE STATUS =================
     @PatchMapping("/{id}/toggle-status")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Users> toggleUserStatus(@PathVariable Long id) {  // Đổi Long → Long
+    public ResponseEntity<UserDTO> toggleUserStatus(@PathVariable Long id) {
+
         return usersRepository.findById(id)
                 .map(user -> {
-                    user.setActive(!user.getActive());  // Sửa isActive() → getActive()
-                    return ResponseEntity.ok(usersRepository.save(user));
+
+                    user.setActive(!user.getActive());
+
+                    Users updatedUser = usersRepository.save(user);
+
+                    return ResponseEntity.ok(convertToDTO(updatedUser));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ================= CHANGE ROLE =================
     @PatchMapping("/{id}/change-role")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Users> changeRole(@PathVariable Long id, @RequestParam String role) {  // Đổi Long → Long
+    public ResponseEntity<UserDTO> changeRole(
+            @PathVariable Long id,
+            @RequestParam String role) {
+
         return usersRepository.findById(id)
                 .map(user -> {
+
                     user.setRole(role);
-                    return ResponseEntity.ok(usersRepository.save(user));
+
+                    Users updatedUser = usersRepository.save(user);
+
+                    return ResponseEntity.ok(convertToDTO(updatedUser));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ================= CONVERT ENTITY → DTO =================
     private UserDTO convertToDTO(Users user) {
+
         UserDTO dto = new UserDTO();
-        dto.setId(user.getId());  // Bây giờ là Long
+
+        dto.setId(user.getId());
         dto.setUsername(user.getUsername());
         dto.setEmail(user.getEmail());
-        dto.setFullName(user.getFullName());  // Thêm dòng này
+        dto.setFullName(user.getFullName());
         dto.setRole(user.getRole());
-        dto.setActive(user.getActive());  // Sửa isActive() → getActive()
+        dto.setActive(user.getActive());
         dto.setCreatedAt(user.getCreatedAt());
-        dto.setLastLogin(user.getLastLogin());  // Thêm dòng này
-        dto.setTotalPoints(user.getPoints());  // Sửa getTotalPoints() → getPoints()
+        dto.setLastLogin(user.getLastLogin());
+        dto.setTotalPoints(user.getPoints());
+
         return dto;
     }
 }
