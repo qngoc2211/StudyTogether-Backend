@@ -3,9 +3,9 @@ package com.example.demo.security;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -18,7 +18,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 @Configuration
-@EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
 
@@ -32,25 +31,23 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
-                // Disable CSRF (vì dùng JWT)
                 .csrf(csrf -> csrf.disable())
 
-                // Bật CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-                // Không dùng session
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
 
-                // Xử lý lỗi rõ ràng
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint())
                         .accessDeniedHandler(accessDeniedHandler())
                 )
 
-                // Phân quyền
                 .authorizeHttpRequests(auth -> auth
+
+                        // 🔥 Cho phép preflight CORS
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         // ===== PUBLIC =====
                         .requestMatchers("/api/auth/**").permitAll()
@@ -76,50 +73,37 @@ public class SecurityConfig {
 
                         // ===== ADMIN =====
                         .requestMatchers("/api/admin/**")
-                        .hasAuthority("ROLE_ADMIN")
+                        .hasRole("ADMIN")
 
-                        // Các request khác yêu cầu login
                         .anyRequest().authenticated()
                 )
 
-                // Thêm JWT filter
                 .addFilterBefore(jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // ===== 401 - CHƯA LOGIN =====
     @Bean
     public AuthenticationEntryPoint authenticationEntryPoint() {
         return (request, response, authException) ->
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
     }
 
-    // ===== 403 - KHÔNG ĐỦ QUYỀN =====
     @Bean
     public AccessDeniedHandler accessDeniedHandler() {
         return (request, response, accessDeniedException) ->
                 response.sendError(HttpServletResponse.SC_FORBIDDEN, "Forbidden");
     }
 
-    // ===== CORS CONFIG =====
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Cho phép tất cả origin (an toàn vì không bật credentials)
         configuration.setAllowedOriginPatterns(List.of("*"));
-
-        // Chỉ cho phép method phổ biến
-        configuration.setAllowedMethods(
-                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
-        );
-
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-
-        // QUAN TRỌNG: để false để tránh lỗi Render
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =

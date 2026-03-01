@@ -28,7 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.usersRepository = usersRepository;
     }
 
-    // 🔥 Quan trọng: Bỏ qua hoàn toàn filter cho /api/auth/**
+    // Bỏ qua filter cho endpoint auth
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
@@ -43,7 +43,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
-        // Nếu không có token → tiếp tục chain
+        // Không có header hoặc sai format → bỏ qua
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
@@ -51,11 +51,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             String token = authHeader.substring(7);
+
+            if (!jwtUtil.validateToken(token)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             String username = jwtUtil.extractUsername(token);
 
             if (username != null &&
-                SecurityContextHolder.getContext().getAuthentication() == null &&
-                jwtUtil.validateToken(token)) {
+                SecurityContextHolder.getContext().getAuthentication() == null) {
 
                 Users user = usersRepository
                         .findByUsername(username)
@@ -63,8 +68,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (user != null) {
 
+                    String role = user.getRole();
+
+                    // 🔥 ĐẢM BẢO LUÔN CÓ ROLE_
+                    if (!role.startsWith("ROLE_")) {
+                        role = "ROLE_" + role;
+                    }
+
                     SimpleGrantedAuthority authority =
-                            new SimpleGrantedAuthority(user.getRole());
+                            new SimpleGrantedAuthority(role);
 
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
@@ -84,8 +96,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
         } catch (Exception e) {
-            // Nếu token lỗi → không set authentication
-            // Không trả 403 ở đây, để Spring xử lý phía sau
+            // Token lỗi → không set authentication
+            // Không trả lỗi tại đây, để Spring xử lý 401/403
         }
 
         filterChain.doFilter(request, response);
