@@ -6,6 +6,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,6 +21,8 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     private final JwtUtil jwtUtil;
     private final UsersRepository usersRepository;
 
@@ -28,10 +32,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.usersRepository = usersRepository;
     }
 
-    // Bỏ qua filter cho endpoint auth
+    // Bỏ qua filter cho endpoint auth và OPTIONS requests
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
+        // Bỏ qua tất cả OPTIONS requests (CORS preflight)
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
         return path.startsWith("/api/auth");
     }
 
@@ -45,19 +53,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // Không có header hoặc sai format → bỏ qua
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            logger.debug("No Bearer token found in request");
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
             String token = authHeader.substring(7);
+            logger.debug("Extracted token: {}", token);
 
             if (!jwtUtil.validateToken(token)) {
+                logger.warn("Token validation failed");
                 filterChain.doFilter(request, response);
                 return;
             }
 
             String username = jwtUtil.extractUsername(token);
+            logger.debug("Token username: {}", username);
 
             if (username != null &&
                 SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -67,10 +79,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         .orElse(null);
 
                 if (user != null) {
+                    logger.debug("User found in DB: {}, role: {}", username, user.getRole());
 
                     String role = user.getRole();
 
-                    // 🔥 ĐẢM BẢO LUÔN CÓ ROLE_
+                    // Đảm bảo luôn có ROLE_
                     if (!role.startsWith("ROLE_")) {
                         role = "ROLE_" + role;
                     }
@@ -92,12 +105,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     SecurityContextHolder.getContext()
                             .setAuthentication(authentication);
+                    logger.info("Authentication set for user: {}", username);
+                } else {
+                    logger.warn("User not found in database: {}", username);
                 }
             }
 
         } catch (Exception e) {
-            // Token lỗi → không set authentication
-            // Không trả lỗi tại đây, để Spring xử lý 401/403
+            logger.error("JWT authentication error: {}", e.getMessage(), e);
+            // Không set authentication, request sẽ bị chặn
         }
 
         filterChain.doFilter(request, response);
