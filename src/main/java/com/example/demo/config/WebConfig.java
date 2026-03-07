@@ -10,7 +10,12 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-                .allowedOrigins("http://localhost:5500", "http://127.0.0.1:5500", "http://localhost:3000")
+                .allowedOrigins(
+                    "http://localhost:5500", 
+                    "http://127.0.0.1:5500", 
+                    "http://localhost:3000",
+                    "https://studytogether123.github.io" // Thêm origin GitHub Pages
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true)
