@@ -6,29 +6,30 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "quiz_results")
 public class QuizResult {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
     @ManyToOne
     @JoinColumn(name = "user_id")
     private Users user;
-    
+
     @ManyToOne
     @JoinColumn(name = "quiz_id")
     private Quiz quiz;
-    
+
     private int score;
-    
+
     private int totalQuestions;
-    
+
     private double percentage;
-    
+
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
-    
+
     private String answers; // Lưu dưới dạng JSON
-    
+
     public QuizResult() {}
 
     public QuizResult(Users user, Quiz quiz, int score, int totalQuestions, String answers) {
@@ -36,7 +37,7 @@ public class QuizResult {
         this.quiz = quiz;
         this.score = score;
         this.totalQuestions = totalQuestions;
-        this.percentage = (double) score / totalQuestions * 100;
+        this.percentage = totalQuestions > 0 ? (double) score / totalQuestions * 100 : 0;
         this.answers = answers;
         this.completedAt = LocalDateTime.now();
     }

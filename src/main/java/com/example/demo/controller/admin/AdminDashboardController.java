@@ -22,7 +22,6 @@ public class AdminDashboardController {
             UsersRepository usersRepository,
             PostRepository postRepository,
             QuizRepository quizRepository) {
-
         this.usersRepository = usersRepository;
         this.postRepository = postRepository;
         this.quizRepository = quizRepository;
@@ -30,13 +29,10 @@ public class AdminDashboardController {
 
     @GetMapping("/dashboard")
     public Map<String, Long> dashboard() {
-
         Map<String, Long> stats = new HashMap<>();
-
         stats.put("users", usersRepository.count());
         stats.put("posts", postRepository.count());
         stats.put("quizzes", quizRepository.count());
-
         return stats;
     }
 }

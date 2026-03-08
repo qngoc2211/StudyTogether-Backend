@@ -19,7 +19,7 @@ public class QuizDTO {
         private List<String> options;
         private String correctAnswer;
 
-        // Getters và Setters
+        // Getters & Setters
         public Long getId() { return id; }
         public void setId(Long id) { this.id = id; }
         public String getContent() { return content; }
@@ -30,7 +30,7 @@ public class QuizDTO {
         public void setCorrectAnswer(String correctAnswer) { this.correctAnswer = correctAnswer; }
     }
 
-    // Getters và Setters
+    // Getters & Setters cho QuizDTO
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getTitle() { return title; }
