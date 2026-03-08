@@ -8,6 +8,7 @@ import com.example.demo.repository.QuizResultRepository;
 import com.example.demo.repository.UsersRepository;
 import com.example.demo.dto.QuizDTO;
 import com.example.demo.dto.QuizHistoryDTO;
+import com.example.demo.dto.QuizResultDetailDTO;
 import com.example.demo.dto.request.SubmitQuizRequest;
 import com.example.demo.service.QuizService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,16 +64,8 @@ public class QuizController {
                     .orElseThrow(() -> new RuntimeException("User not found"));
             request.setUserId(user.getId());
 
-            QuizResult result = quizService.submitQuiz(request);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("score", result.getScore());
-            response.put("totalQuestions", result.getTotalQuestions());
-            response.put("percentage", result.getPercentage());
-            response.put("pointsEarned", result.getScore() * 10);
-            response.put("message", "Nộp bài thành công!");
-            return ResponseEntity.ok(response);
+            QuizResultDetailDTO result = quizService.submitQuiz(request);
+            return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("success", false, "message", "Lỗi: " + e.getMessage()));
