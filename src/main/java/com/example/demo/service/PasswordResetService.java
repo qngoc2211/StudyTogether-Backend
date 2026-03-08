@@ -22,12 +22,12 @@ public class PasswordResetService {
     private PasswordResetTokenRepository tokenRepository;
 
     @Autowired
-    private EmailService emailService;  // Service gửi email qua SendGrid API
+    private EmailService emailService;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private static final int OTP_EXPIRY_MINUTES = 10; // Thời gian hiệu lực của OTP (phút)
+    private static final int OTP_EXPIRY_MINUTES = 10;
 
     /**
      * Tạo OTP ngẫu nhiên 6 chữ số
@@ -47,8 +47,8 @@ public class PasswordResetService {
         Users user = usersRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Email không tồn tại trong hệ thống"));
 
-        // Xóa token cũ (nếu có) để tránh rác
-        tokenRepository.findByEmail(email).ifPresent(tokenRepository::delete);
+        // Xóa tất cả token cũ của email này (đảm bảo không bị duplicate key)
+        tokenRepository.deleteByEmail(email);
 
         // Tạo OTP mới
         String otp = generateOtp();
@@ -76,11 +76,9 @@ public class PasswordResetService {
                 .findByEmailAndOtpAndExpiryDateAfterAndUsedFalse(email, otp, LocalDateTime.now())
                 .orElseThrow(() -> new RuntimeException("Mã OTP không hợp lệ hoặc đã hết hạn"));
 
-        // Đánh dấu token đã được sử dụng (để tránh dùng lại OTP nhiều lần)
         token.setUsed(true);
         tokenRepository.save(token);
 
-        // Có thể trả về thông tin xác thực (ở đây đơn giản là "verified")
         return "verified";
     }
 
@@ -96,13 +94,9 @@ public class PasswordResetService {
         PasswordResetToken token = tokenRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy yêu cầu đặt lại mật khẩu"));
 
-        // Kiểm tra token đã được xác thực và chưa hết hạn
         if (token.isUsed() && token.getExpiryDate().isAfter(LocalDateTime.now())) {
-            // Mã hóa mật khẩu mới và lưu
             user.setPassword(passwordEncoder.encode(newPassword));
             usersRepository.save(user);
-
-            // Xóa token sau khi đã dùng (tránh dùng lại)
             tokenRepository.delete(token);
         } else {
             throw new RuntimeException("Yêu cầu không hợp lệ hoặc đã hết hạn");
