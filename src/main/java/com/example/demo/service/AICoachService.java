@@ -8,12 +8,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class AICoachService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AICoachService.class);
 
     @Value("${ai.api.key}")
     private String apiKey;
@@ -33,12 +37,19 @@ public class AICoachService {
             return "🎉 Chúc mừng! Bạn đã trả lời đúng tất cả các câu hỏi. Hãy tiếp tục phát huy!";
         }
 
+        log.info("Bắt đầu xử lý generateAdvice với {} lỗi", mistakes.size());
+
         // Thử gọi API AI
         try {
             String prompt = buildPrompt(mistakes);
-            return callAI(prompt);
+            log.debug("Prompt gửi đến AI: {}", prompt);
+            String aiResponse = callAI(prompt);
+            log.info("Gọi AI thành công, phản hồi nhận được (độ dài: {} ký tự)", aiResponse.length());
+            return aiResponse;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Lỗi khi gọi AI: {}", e.getMessage(), e);
+            // In thêm thông tin cấu hình (ẩn key)
+            log.debug("Cấu hình AI - URL: {}, Model: {}, Key: {}", apiUrl, model, apiKey != null ? "***" : "null");
             // Nếu lỗi, dùng fallback thông minh hơn
             return buildSmartFallbackAdvice(mistakes);
         }
@@ -90,16 +101,35 @@ public class AICoachService {
         requestBody.put("max_tokens", 1000);
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-        ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST, entity, String.class);
-
-        JsonNode root = objectMapper.readTree(response.getBody());
-        return root.path("choices").get(0).path("message").path("content").asText();
+        
+        log.info("Gửi request đến AI tại URL: {}", apiUrl);
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST, entity, String.class);
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Nhận response từ AI sau {} ms, status code: {}", duration, response.getStatusCode());
+            
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("AI trả về lỗi HTTP: {} - Body: {}", response.getStatusCode(), response.getBody());
+                throw new RuntimeException("AI API trả về lỗi: " + response.getStatusCode());
+            }
+            
+            JsonNode root = objectMapper.readTree(response.getBody());
+            String content = root.path("choices").get(0).path("message").path("content").asText();
+            log.debug("Nội dung AI: {}", content);
+            return content;
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            log.error("Lỗi HTTP khi gọi AI: {} - {}", e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw e;
+        }
     }
 
     /**
      * Fallback thông minh: phân tích lỗi theo chủ đề và đưa ra gợi ý
      */
     private String buildSmartFallbackAdvice(List<Mistake> mistakes) {
+        log.info("Sử dụng fallback thông minh do lỗi kết nối AI");
         // Đếm số lỗi theo chủ đề (dựa vào nội dung câu hỏi hoặc link)
         Map<String, Integer> topicCount = new HashMap<>();
         for (Mistake m : mistakes) {
