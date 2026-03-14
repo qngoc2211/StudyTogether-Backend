@@ -9,7 +9,6 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
 
 import java.util.*;
 
@@ -18,17 +17,19 @@ public class AICoachService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AICoachService.class);
 
-    @Value("${ai.api.key}")
+    @Value("${gemini.api.key}")
     private String apiKey;
 
-    @Value("${ai.api.url}")
+    @Value("${gemini.api.url:https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent}")
     private String apiUrl;
 
-    @Value("${ai.model:deepseek-chat}")
+    @Value("${gemini.model:gemini-2.5-flash}")
     private String model;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    // ==================== Public Methods ====================
 
     public String generateAdvice(AICoachRequest request) {
         List<Mistake> mistakes = request.getMistakes();
@@ -36,37 +37,31 @@ public class AICoachService {
             return "🎉 Chúc mừng! Bạn đã trả lời đúng tất cả các câu hỏi. Hãy tiếp tục phát huy!";
         }
 
-        log.info("Bắt đầu xử lý generateAdvice với {} lỗi", mistakes.size());
-
         try {
             String prompt = buildPrompt(mistakes);
-            log.debug("Prompt gửi đến AI: {}", prompt);
-            String aiResponse = callAI(prompt);
-            log.info("Gọi AI thành công, phản hồi nhận được (độ dài: {} ký tự)", aiResponse.length());
-            return aiResponse;
+            return callAI(prompt);
         } catch (Exception e) {
-            log.error("Lỗi khi gọi AI: {}", e.getMessage(), e);
-            log.debug("Cấu hình AI - URL: {}, Model: {}, Key: {}", apiUrl, model, apiKey != null ? "***" : "null");
+            log.error("Lỗi khi gọi Gemini API: {}", e.getMessage(), e);
             return buildSmartFallbackAdvice(mistakes);
         }
     }
 
-    /**
-     * Gọi AI trực tiếp, không fallback. Ném exception nếu lỗi.
-     */
+    // Phương thức này dành cho AITestController, gọi AI trực tiếp không fallback
     public String callAIDirectly(AICoachRequest request) throws Exception {
         List<Mistake> mistakes = request.getMistakes();
         if (mistakes == null || mistakes.isEmpty()) {
             return "Không có lỗi để phân tích.";
         }
         String prompt = buildPrompt(mistakes);
-        return callAI(prompt);
+        return callAI(prompt); // throw exception nếu lỗi
     }
 
-    // Getters để controller lấy thông tin cấu hình
+    // Các getter để AITestController đọc cấu hình
     public String getApiKey() { return apiKey; }
     public String getApiUrl() { return apiUrl; }
     public String getModel() { return model; }
+
+    // ==================== Private Methods ====================
 
     private String buildPrompt(List<Mistake> mistakes) {
         StringBuilder sb = new StringBuilder();
@@ -99,40 +94,41 @@ public class AICoachService {
     }
 
     private String callAI(String prompt) throws Exception {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Authorization", "Bearer " + apiKey);
+        String url = apiUrl + "?key=" + apiKey;
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
-        requestBody.put("messages", List.of(
-                Map.of("role", "system", "content", "Bạn là một trợ lý AI chuyên về giáo dục, giúp sinh viên cải thiện kiến thức."),
-                Map.of("role", "user", "content", prompt)
-        ));
-        requestBody.put("temperature", 0.7);
-        requestBody.put("max_tokens", 1000);
+        List<Map<String, Object>> contents = new ArrayList<>();
+        Map<String, Object> content = new HashMap<>();
+        List<Map<String, String>> parts = new ArrayList<>();
+        Map<String, String> part = new HashMap<>();
+        part.put("text", prompt);
+        parts.add(part);
+        content.put("parts", parts);
+        contents.add(content);
+        requestBody.put("contents", contents);
+
+        Map<String, Object> generationConfig = new HashMap<>();
+        generationConfig.put("temperature", 0.7);
+        generationConfig.put("maxOutputTokens", 1000);
+        requestBody.put("generationConfig", generationConfig);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-        
-        log.info("Gửi request đến AI tại URL: {}", apiUrl);
+
+        log.info("Gửi request đến Gemini API");
         long startTime = System.currentTimeMillis();
-        
+
         try {
-            ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST, entity, String.class);
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Nhận response từ AI sau {} ms, status code: {}", duration, response.getStatusCode());
-            
-            if (!response.getStatusCode().is2xxSuccessful()) {
-                log.error("AI trả về lỗi HTTP: {} - Body: {}", response.getStatusCode(), response.getBody());
-                throw new RuntimeException("AI API trả về lỗi: " + response.getStatusCode());
-            }
-            
+            log.info("Nhận response từ Gemini sau {} ms, status code: {}", duration, response.getStatusCode());
+
             JsonNode root = objectMapper.readTree(response.getBody());
-            String content = root.path("choices").get(0).path("message").path("content").asText();
-            log.debug("Nội dung AI: {}", content);
-            return content;
-        } catch (HttpClientErrorException | HttpServerErrorException e) {
-            log.error("Lỗi HTTP khi gọi AI: {} - {}", e.getStatusCode(), e.getResponseBodyAsString(), e);
+            return root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
+        } catch (HttpClientErrorException e) {
+            log.error("Lỗi HTTP khi gọi Gemini: {} - {}", e.getStatusCode(), e.getResponseBodyAsString(), e);
             throw e;
         }
     }
@@ -161,18 +157,15 @@ public class AICoachService {
         StringBuilder advice = new StringBuilder();
         advice.append("🧠 **Phân tích điểm yếu của bạn**\n\n");
         advice.append("Dựa trên các câu sai, tôi nhận thấy bạn cần cải thiện nhiều nhất ở mảng **").append(weakestTopic).append("**.\n\n");
-
         advice.append("📚 **Các chủ đề cần ôn tập:**\n");
         for (Map.Entry<String, Integer> entry : topicCount.entrySet()) {
             advice.append("   - ").append(entry.getKey()).append(": ").append(entry.getValue()).append(" lỗi\n");
         }
         advice.append("\n");
-
         advice.append("🔍 **Phương pháp cải thiện:**\n");
         advice.append("   - Đọc kỹ lại các bài viết được đề cập dưới đây.\n");
         advice.append("   - Ghi chép lại những khái niệm quan trọng (ví dụ: BATNA, phân biệt position và interest).\n");
         advice.append("   - Thực hành với các tình huống giả định để áp dụng lý thuyết.\n\n");
-
         advice.append("📖 **Danh sách bài viết tham khảo:**\n");
         for (Mistake m : mistakes) {
             if (m.getExplanationLink() != null && !m.getExplanationLink().isEmpty()) {
@@ -180,15 +173,12 @@ public class AICoachService {
             }
         }
         advice.append("\n");
-
         advice.append("💡 **Lộ trình ôn tập đề xuất (1 tuần):**\n");
         advice.append("   - Ngày 1-2: Đọc và hiểu các bài viết về ").append(weakestTopic).append(".\n");
         advice.append("   - Ngày 3-4: Làm bài tập trắc nghiệm và tự luận liên quan.\n");
         advice.append("   - Ngày 5: Ôn tập lại toàn bộ và tự giải thích lại các khái niệm.\n");
         advice.append("   - Ngày 6-7: Tham gia thảo luận nhóm hoặc viết blog tóm tắt kiến thức.\n\n");
-
         advice.append("Nếu có thể, hãy kết nối lại AI để nhận lời khuyên chi tiết hơn nhé!");
-
         return advice.toString();
     }
 }
