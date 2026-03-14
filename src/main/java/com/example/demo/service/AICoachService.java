@@ -46,17 +46,15 @@ public class AICoachService {
         }
     }
 
-    // Phương thức này dành cho AITestController, gọi AI trực tiếp không fallback
     public String callAIDirectly(AICoachRequest request) throws Exception {
         List<Mistake> mistakes = request.getMistakes();
         if (mistakes == null || mistakes.isEmpty()) {
             return "Không có lỗi để phân tích.";
         }
         String prompt = buildPrompt(mistakes);
-        return callAI(prompt); // throw exception nếu lỗi
+        return callAI(prompt);
     }
 
-    // Các getter để AITestController đọc cấu hình
     public String getApiKey() { return apiKey; }
     public String getApiUrl() { return apiUrl; }
     public String getModel() { return model; }
@@ -65,15 +63,14 @@ public class AICoachService {
 
     private String buildPrompt(List<Mistake> mistakes) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Bạn là một gia sư AI thông minh, chuyên phân tích lỗi sai và đưa ra lời khuyên học tập. ");
-        sb.append("Hãy xem xét các câu hỏi mà người học đã trả lời sai dưới đây, phân tích xem họ yếu ở mảng kiến thức nào, ");
-        sb.append("và đề xuất phương pháp cải thiện cụ thể (bài đọc, video, bài tập, v.v.). Trả lời bằng tiếng Việt, thân thiện và chi tiết.\n\n");
-        sb.append("📋 **DANH SÁCH CÂU SAI**\n");
+        sb.append("Bạn là một gia sư AI chuyên nghiệp, giàu kinh nghiệm trong việc giúp sinh viên cải thiện kiến thức. ");
+        sb.append("Học sinh vừa làm một bài quiz và có một số câu sai. Dưới đây là danh sách các câu hỏi mà họ đã trả lời sai, kèm theo đáp án đúng và giải thích ngắn (nếu có).\n\n");
+        sb.append("📋 **CÁC CÂU SAI**\n");
 
         for (int i = 0; i < mistakes.size(); i++) {
             Mistake m = mistakes.get(i);
             sb.append("**Câu ").append(i + 1).append(":** ").append(m.getQuestion()).append("\n");
-            sb.append("   - ❌ Đáp án của bạn: ").append(m.getUserAnswer()).append("\n");
+            sb.append("   - ❌ Câu trả lời của học viên: ").append(m.getUserAnswer()).append("\n");
             sb.append("   - ✅ Đáp án đúng: ").append(m.getCorrectAnswer()).append("\n");
             if (m.getExplanation() != null && !m.getExplanation().isEmpty()) {
                 sb.append("   - 📘 Giải thích: ").append(m.getExplanation()).append("\n");
@@ -84,11 +81,13 @@ public class AICoachService {
             sb.append("\n");
         }
 
-        sb.append("Dựa trên thông tin trên, hãy giúp tôi:\n");
-        sb.append("1. **Phân tích** tôi đang yếu ở những chủ đề / mảng kiến thức nào?\n");
-        sb.append("2. **Đề xuất** các nguồn học tập phù hợp (bài viết, sách, khóa học, video) – nếu có link cụ thể từ dữ liệu trên thì khuyến khích sử dụng.\n");
-        sb.append("3. **Gợi ý lộ trình ôn tập** trong 1-2 tuần tới, bao gồm cả thời gian biểu gợi ý.\n");
-        sb.append("Trả lời bằng tiếng Việt, văn phong gần gũi, có thể dùng emoji để sinh động.");
+        sb.append("Dựa trên thông tin trên, hãy viết một lời khuyên học tập chi tiết (khoảng 300-500 từ) bằng tiếng Việt, với giọng điệu thân thiện, động viên. Lời khuyên cần:\n");
+        sb.append("1. **Phân tích điểm mạnh, điểm yếu**: Nhận xét xem học viên yếu ở mảng nào (ví dụ: quản lý thời gian, đàm phán, BATNA...).\n");
+        sb.append("2. **Giải thích ngắn gọn các khái niệm quan trọng** liên quan đến các câu sai (nếu cần).\n");
+        sb.append("3. **Đề xuất phương pháp học tập cụ thể**: Nên đọc bài viết nào (dẫn link từ dữ liệu), làm bài tập gì, xem video ở đâu, thực hành ra sao.\n");
+        sb.append("4. **Gợi ý lộ trình ôn tập trong 1 tuần**: phân bổ thời gian hợp lý, kết hợp lý thuyết và thực hành.\n");
+        sb.append("5. **Kết thúc bằng lời động viên, khích lệ**.\n\n");
+        sb.append("Hãy viết thật chi tiết và hữu ích, có thể dùng emoji và định dạng markdown cơ bản để dễ đọc.");
 
         return sb.toString();
     }
@@ -108,8 +107,8 @@ public class AICoachService {
         requestBody.put("contents", contents);
 
         Map<String, Object> generationConfig = new HashMap<>();
-        generationConfig.put("temperature", 0.7);
-        generationConfig.put("maxOutputTokens", 1000);
+        generationConfig.put("temperature", 0.8);  // tăng lên 0.8 để sáng tạo hơn
+        generationConfig.put("maxOutputTokens", 1500); // tăng token để có câu trả lời dài hơn
         requestBody.put("generationConfig", generationConfig);
 
         HttpHeaders headers = new HttpHeaders();
@@ -117,7 +116,7 @@ public class AICoachService {
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
-        log.info("Gửi request đến Gemini API");
+        log.info("Gửi request đến Gemini API tại URL: {}", apiUrl);
         long startTime = System.currentTimeMillis();
 
         try {
